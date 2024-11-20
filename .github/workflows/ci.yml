@@ -1,4 +1,4 @@
-name: CI Test
+name: CI Test with Performance Comparison
 
 on:
   pull_request:
@@ -21,5 +21,27 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Run tests
-      run: npm test
+    - name: Run tests and measure performance
+      run: |
+        npm test --verbose > result.log
+
+        # Parse the log to get the test durations
+        test_duration=$(grep "Test duration" result.log | awk '{print $3}' | sort -n | tail -n 1)
+
+        echo "Current test duration: ${test_duration}ms"
+
+        baseline_duration=$(cat baseline_performance.txt || echo 0)
+
+        echo "Baseline test duration: ${baseline_duration}ms"
+
+        echo $test_duration > baseline_performance.txt
+
+        if [ "$baseline_duration" -gt 0 ]; then
+          performance_change=$(echo "scale=2; ($test_duration - $baseline_duration) / $baseline_duration * 100" | bc)
+          echo "Performance change: ${performance_change}%"
+
+          if (( $(echo "$performance_change > 20" | bc -l) )); then
+            echo "Warning: Performance degraded by ${performance_change}%!"
+            exit 1
+          fi
+        fi
